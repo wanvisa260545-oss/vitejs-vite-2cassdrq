@@ -71,22 +71,35 @@ function safeJsonParse(value, fallback) {
     return fallback;
   }
 }
-
 function getPhotoSrc(item) {
   const url = item?.photo || item?.photoUrl || "";
+
   if (!url) return "";
 
   const text = String(url);
-  if (text.startsWith("data:image")) return text;
 
-  const fileIdFromView = text.match(/\/d\/([^/]+)/);
-  if (fileIdFromView?.[1]) {
-    return `https://drive.google.com/uc?export=view&id=${fileIdFromView[1]}`;
+  // รูปที่ยังไม่ได้ส่งขึ้น Google Drive
+  if (text.startsWith("data:image")) {
+    return text;
   }
 
+  // ถ้าเป็นลิงก์ thumbnail อยู่แล้ว
+  if (text.includes("drive.google.com/thumbnail")) {
+    return text;
+  }
+
+  // กรณีเป็นลิงก์ /d/FILE_ID/
+  const fileIdFromView = text.match(/\/d\/([^/]+)/);
+
+  if (fileIdFromView?.[1]) {
+    return `https://drive.google.com/thumbnail?id=${fileIdFromView[1]}&sz=w1000`;
+  }
+
+  // กรณีเป็น ?id=FILE_ID
   const fileIdFromQuery = text.match(/[?&]id=([^&]+)/);
+
   if (fileIdFromQuery?.[1]) {
-    return `https://drive.google.com/uc?export=view&id=${fileIdFromQuery[1]}`;
+    return `https://drive.google.com/thumbnail?id=${fileIdFromQuery[1]}&sz=w1000`;
   }
 
   return text;
@@ -155,13 +168,20 @@ function prepareSheetData(request) {
 
 async function saveToGoogleSheet(request) {
   const body = new URLSearchParams();
-  body.append("data", JSON.stringify(prepareSheetData(request)));
+
+  body.append(
+    "data",
+    JSON.stringify(prepareSheetData(request))
+  );
 
   try {
     await fetch(GOOGLE_SHEET_WEB_APP_URL, {
       method: "POST",
+      mode: "no-cors",
       body,
     });
+
+    console.log("saved to google sheet");
   } catch (error) {
     console.log("save error", error);
   }
