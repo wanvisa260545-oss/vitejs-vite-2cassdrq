@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const ADMIN_PASSWORD = "saffair";
 const STORAGE_KEY = "borrow-system-local-cache-v2";
-const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzzqEOAUKispeg_spLlO6XESD3k_L-6qcs_zsh1mVvzDKG9VaHLXEYsNaIGsnLC7XQ/exec";
+const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyA71spcpp7c_fSLyGxgOH98_Y300TChpvR33cm8XImGNbQfyevgVG7Gt5mUdoWp2r5DA/exec";
 
 const today = new Date().toISOString().slice(0, 10);
 const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
