@@ -73,20 +73,22 @@ function safeJsonParse(value, fallback) {
 }
 
 function getPhotoSrc(item) {
-  const url = item?.photo || item?.photoUrl || "";
+  const url = item?.photoUrl || item?.photo || "";
   if (!url) return "";
 
   const text = String(url);
+
   if (text.startsWith("data:image")) return text;
+  if (text.includes("drive.google.com/thumbnail")) return text;
 
   const fileIdFromView = text.match(/\/d\/([^/]+)/);
   if (fileIdFromView?.[1]) {
-    return `https://drive.google.com/uc?export=view&id=${fileIdFromView[1]}`;
+    return `https://drive.google.com/thumbnail?id=${fileIdFromView[1]}&sz=w1000`;
   }
 
   const fileIdFromQuery = text.match(/[?&]id=([^&]+)/);
   if (fileIdFromQuery?.[1]) {
-    return `https://drive.google.com/uc?export=view&id=${fileIdFromQuery[1]}`;
+    return `https://drive.google.com/thumbnail?id=${fileIdFromQuery[1]}&sz=w1000`;
   }
 
   return text;
@@ -113,7 +115,7 @@ function normalizeRequest(raw) {
       name: item.name || "",
       qty: item.qty || 1,
       note: item.note || "",
-      photo: item.photo || item.photoUrl || "",
+      photo: item.photoUrl || item.photo || "",
       photoUrl: item.photoUrl || item.photo || "",
     })),
     createdAt: raw.createdAt || "",
@@ -174,13 +176,21 @@ function loadFromGoogleSheet() {
     const callbackName = `sheetCallback_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const script = document.createElement("script");
 
+    const timer = window.setTimeout(() => {
+      delete window[callbackName];
+      script.remove();
+      reject(new Error("โหลดข้อมูลจาก Google Sheet ไม่สำเร็จ"));
+    }, 15000);
+
     window[callbackName] = (data) => {
+      window.clearTimeout(timer);
       delete window[callbackName];
       script.remove();
       resolve(data);
     };
 
     script.onerror = () => {
+      window.clearTimeout(timer);
       delete window[callbackName];
       script.remove();
       reject(new Error("โหลดข้อมูลจาก Google Sheet ไม่สำเร็จ"));
