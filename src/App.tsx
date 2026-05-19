@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const ADMIN_PASSWORD = "saffair";
-const STORAGE_KEY = "borrow-system-local-cache-v1";
-
-// วางลิงก์ Apps Script /exec ของคุณตรงนี้
+const STORAGE_KEY = "borrow-system-local-cache-v2";
 const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyA71spcpp7c_fSLyGxgOH98_Y300TChpvR33cm8XImGNbQfyevgVG7Gt5mUdoWp2r5DA/exec";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -47,7 +45,7 @@ function createForm() {
     purpose: "",
     borrowDate: today,
     dueDate: tomorrow,
-    items: [{ name: "", qty: 1, note: "", photo: "" }],
+    items: [{ name: "", qty: 1, note: "", photo: "", photoUrl: "" }],
     agree: false,
   };
 }
@@ -74,6 +72,26 @@ function safeJsonParse(value, fallback) {
   }
 }
 
+function getPhotoSrc(item) {
+  const url = item?.photo || item?.photoUrl || "";
+  if (!url) return "";
+
+  const text = String(url);
+  if (text.startsWith("data:image")) return text;
+
+  const fileIdFromView = text.match(/\/d\/([^/]+)/);
+  if (fileIdFromView?.[1]) {
+    return `https://drive.google.com/uc?export=view&id=${fileIdFromView[1]}`;
+  }
+
+  const fileIdFromQuery = text.match(/[?&]id=([^&]+)/);
+  if (fileIdFromQuery?.[1]) {
+    return `https://drive.google.com/uc?export=view&id=${fileIdFromQuery[1]}`;
+  }
+
+  return text;
+}
+
 function normalizeRequest(raw) {
   const items = safeJsonParse(raw.items, []);
   const returnChecklist = safeJsonParse(raw.returnChecklist, []);
@@ -96,6 +114,7 @@ function normalizeRequest(raw) {
       qty: item.qty || 1,
       note: item.note || "",
       photo: item.photo || item.photoUrl || "",
+      photoUrl: item.photoUrl || item.photo || "",
     })),
     createdAt: raw.createdAt || "",
     approvedAt: raw.approvedAt || "",
@@ -138,11 +157,14 @@ async function saveToGoogleSheet(request) {
   const body = new URLSearchParams();
   body.append("data", JSON.stringify(prepareSheetData(request)));
 
-  await fetch(GOOGLE_SHEET_WEB_APP_URL, {
-    method: "POST",
-    mode: "no-cors",
-    body,
-  });
+  try {
+    await fetch(GOOGLE_SHEET_WEB_APP_URL, {
+      method: "POST",
+      body,
+    });
+  } catch (error) {
+    console.log("save error", error);
+  }
 }
 
 function loadFromGoogleSheet() {
@@ -254,7 +276,7 @@ export default function App() {
   }
 
   function addItem() {
-    setForm({ ...form, items: [...form.items, { name: "", qty: 1, note: "", photo: "" }] });
+    setForm({ ...form, items: [...form.items, { name: "", qty: 1, note: "", photo: "", photoUrl: "" }] });
   }
 
   function removeItem(index) {
@@ -268,7 +290,7 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = () => {
       const items = [...form.items];
-      items[index] = { ...items[index], photo: reader.result };
+      items[index] = { ...items[index], photo: reader.result, photoUrl: "" };
       setForm({ ...form, items });
     };
     reader.readAsDataURL(file);
@@ -497,7 +519,7 @@ export default function App() {
                         <span>📷 แนบรูปของรายการนี้</span>
                         <small>ถ่ายรูปหรือแนบรูปเฉพาะรายการ</small>
                         <input type="file" accept="image/*" onChange={(e) => handleItemPhoto(index, e)} hidden />
-                        {item.photo && <img src={item.photo} alt="preview" />}
+                        {getPhotoSrc(item) && <img src={getPhotoSrc(item)} alt="preview" />}
                       </label>
                     </div>
                   ))}
@@ -656,7 +678,7 @@ function RequestCard({ request, onView, onApprove, onReject, onReturn, onDelete 
     <div className="requestCard">
       <div className="requestHeader">
         <div><div className="rowStart"><b className="code">{request.code}</b><Badge status={request.displayStatus} /></div><h3>{request.prefix}{request.fullname}</h3><p>{request.email} {request.phone ? `• ${request.phone}` : ""} • {request.department} • ชั้นปี {request.year}</p></div>
-        {request.items.some((item) => item.photo) && <div className="photoPreviewGroup">{request.items.map((item, index) => item.photo ? <img key={index} src={item.photo} alt={item.name} /> : null)}</div>}
+        {request.items.some((item) => getPhotoSrc(item)) && <div className="photoPreviewGroup">{request.items.map((item, index) => getPhotoSrc(item) ? <img key={index} src={getPhotoSrc(item)} alt={item.name} /> : null)}</div>}
       </div>
       <div className="borrowItems">{request.items.map((item, index) => <div key={index}>• <b>{item.name}</b> จำนวน <b>{item.qty}</b>{item.note ? <span> ({item.note})</span> : null}</div>)}</div>
       <p className="muted">งาน: {request.purpose} • ยืม {request.borrowDate} • กำหนดคืน {request.dueDate}</p>
@@ -671,7 +693,7 @@ function RequestCard({ request, onView, onApprove, onReject, onReturn, onDelete 
 
 function DetailModal({ request, onClose }) {
   return (
-    <div className="modalBackdrop"><div className="modal"><div className="modalHeader"><h2>รายละเอียดคำขอ {request.code}</h2><button type="button" onClick={onClose}>×</button></div><Badge status={request.displayStatus} /><div className="detailGrid"><p><b>ผู้ยืม:</b> {request.prefix}{request.fullname}</p><p><b>อีเมล:</b> {request.email}</p><p><b>เบอร์โทร:</b> {request.phone || "-"}</p><p><b>สาขา/ฝ่าย:</b> {request.department}</p><p><b>ชั้นปี:</b> {request.year}</p><p><b>วัตถุประสงค์:</b> {request.purpose}</p><p><b>วันที่ยืม:</b> {request.borrowDate}</p><p><b>กำหนดคืน:</b> {request.dueDate}</p><p><b>ผู้อนุมัติ:</b> {request.approvedBy || "-"}</p><p><b>ผู้รับคืน:</b> {request.returnedBy || "-"}</p><p><b>วันที่คืน:</b> {request.returnedAt || "-"}</p></div><h3>รายการของที่ยืม</h3>{request.items.map((item, index) => <div className="modalItem" key={index}>{index + 1}. {item.name} จำนวน {item.qty} {item.note ? `(${item.note})` : ""}</div>)}{request.returnChecklist && request.returnChecklist.length > 0 && <><h3>เช็กลิสต์การคืน</h3>{request.returnChecklist.map((item, index) => <div className="modalItem" key={index}>✓ {index + 1}. {item.name} จำนวน {item.qty} • {item.condition}{item.returnNote ? ` (${item.returnNote})` : ""}</div>)}</>}{request.items.some((item) => item.photo) && <><h3>รูปหลักฐานแต่ละรายการ</h3><div className="detailPhotos">{request.items.map((item, index) => item.photo ? <div key={index} className="detailPhotoCard"><p><b>{item.name}</b></p><img className="modalPhoto" src={item.photo} alt={item.name} /></div> : null)}</div></>}</div></div>
+    <div className="modalBackdrop"><div className="modal"><div className="modalHeader"><h2>รายละเอียดคำขอ {request.code}</h2><button type="button" onClick={onClose}>×</button></div><Badge status={request.displayStatus} /><div className="detailGrid"><p><b>ผู้ยืม:</b> {request.prefix}{request.fullname}</p><p><b>อีเมล:</b> {request.email}</p><p><b>เบอร์โทร:</b> {request.phone || "-"}</p><p><b>สาขา/ฝ่าย:</b> {request.department}</p><p><b>ชั้นปี:</b> {request.year}</p><p><b>วัตถุประสงค์:</b> {request.purpose}</p><p><b>วันที่ยืม:</b> {request.borrowDate}</p><p><b>กำหนดคืน:</b> {request.dueDate}</p><p><b>ผู้อนุมัติ:</b> {request.approvedBy || "-"}</p><p><b>ผู้รับคืน:</b> {request.returnedBy || "-"}</p><p><b>วันที่คืน:</b> {request.returnedAt || "-"}</p></div><h3>รายการของที่ยืม</h3>{request.items.map((item, index) => <div className="modalItem" key={index}>{index + 1}. {item.name} จำนวน {item.qty} {item.note ? `(${item.note})` : ""}</div>)}{request.returnChecklist && request.returnChecklist.length > 0 && <><h3>เช็กลิสต์การคืน</h3>{request.returnChecklist.map((item, index) => <div className="modalItem" key={index}>✓ {index + 1}. {item.name} จำนวน {item.qty} • {item.condition}{item.returnNote ? ` (${item.returnNote})` : ""}</div>)}</>}{request.items.some((item) => getPhotoSrc(item)) && <><h3>รูปหลักฐานแต่ละรายการ</h3><div className="detailPhotos">{request.items.map((item, index) => getPhotoSrc(item) ? <div key={index} className="detailPhotoCard"><p><b>{item.name}</b></p><img className="modalPhoto" src={getPhotoSrc(item)} alt={item.name} /></div> : null)}</div></>}</div></div>
   );
 }
 
