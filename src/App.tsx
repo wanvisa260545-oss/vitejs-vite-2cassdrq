@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const ADMIN_PASSWORD = "saffair";
 const STORAGE_KEY = "borrow-system-local-cache-v2";
-const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyA71spcpp7c_fSLyGxgOH98_Y300TChpvR33cm8XImGNbQfyevgVG7Gt5mUdoWp2r5DA/exec";
+const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzzqEOAUKispeg_spLlO6XESD3k_L-6qcs_zsh1mVvzDKG9VaHLXEYsNaIGsnLC7XQ/exec";
 
 const today = new Date().toISOString().slice(0, 10);
 const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -71,35 +71,22 @@ function safeJsonParse(value, fallback) {
     return fallback;
   }
 }
+
 function getPhotoSrc(item) {
   const url = item?.photo || item?.photoUrl || "";
-
   if (!url) return "";
 
   const text = String(url);
+  if (text.startsWith("data:image")) return text;
 
-  // รูปที่ยังไม่ได้ส่งขึ้น Google Drive
-  if (text.startsWith("data:image")) {
-    return text;
-  }
-
-  // ถ้าเป็นลิงก์ thumbnail อยู่แล้ว
-  if (text.includes("drive.google.com/thumbnail")) {
-    return text;
-  }
-
-  // กรณีเป็นลิงก์ /d/FILE_ID/
   const fileIdFromView = text.match(/\/d\/([^/]+)/);
-
   if (fileIdFromView?.[1]) {
-    return `https://drive.google.com/thumbnail?id=${fileIdFromView[1]}&sz=w1000`;
+    return `https://drive.google.com/uc?export=view&id=${fileIdFromView[1]}`;
   }
 
-  // กรณีเป็น ?id=FILE_ID
   const fileIdFromQuery = text.match(/[?&]id=([^&]+)/);
-
   if (fileIdFromQuery?.[1]) {
-    return `https://drive.google.com/thumbnail?id=${fileIdFromQuery[1]}&sz=w1000`;
+    return `https://drive.google.com/uc?export=view&id=${fileIdFromQuery[1]}`;
   }
 
   return text;
@@ -168,11 +155,7 @@ function prepareSheetData(request) {
 
 async function saveToGoogleSheet(request) {
   const body = new URLSearchParams();
-
-  body.append(
-    "data",
-    JSON.stringify(prepareSheetData(request))
-  );
+  body.append("data", JSON.stringify(prepareSheetData(request)));
 
   try {
     await fetch(GOOGLE_SHEET_WEB_APP_URL, {
@@ -180,7 +163,6 @@ async function saveToGoogleSheet(request) {
       mode: "no-cors",
       body,
     });
-
     console.log("saved to google sheet");
   } catch (error) {
     console.log("save error", error);
